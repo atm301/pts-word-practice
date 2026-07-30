@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>行銷人成語包 速覽表｜一字千金 練習場</title>
+<meta name="description" content="81 句廣告行銷工作用得上的成語速覽：提案、文案、投放、口碑、危機、客戶、競爭、團隊。">
+<meta name="robots" content="noindex,follow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23fbbf24'/%3E%3Ctext x='32' y='45' font-size='40' font-family='serif' font-weight='bold' text-anchor='middle' fill='%2303121e'%3E速%3C/text%3E%3C/svg%3E">
+<style>
+:root{--bg:#050915;--line:rgba(148,178,255,.16);--gold:#fbbf24;--cyan:#38bdf8;--text:#e4eaf7;--muted:#8b9cbd;
+  --kai:"DFKai-SB","BiauKai","Kaiti TC","Noto Serif TC","PMingLiU",serif}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;line-height:1.55;
+  background:var(--bg);color:var(--text);padding:28px 16px 60px}
+.wrap{max-width:880px;margin:0 auto}
+h1{font-family:var(--kai);letter-spacing:.06em;font-size:1.7rem;margin:0 0 4px}
+.sub{color:var(--muted);font-size:.85rem;margin:0 0 20px}
+.sub a{color:var(--cyan)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.toolbar button{font:inherit;font-size:.84rem;padding:7px 15px;border-radius:99px;cursor:pointer;
+  border:1px solid var(--line);background:rgba(148,178,255,.06);color:var(--text)}
+.toolbar button:hover{background:rgba(148,178,255,.12)}
+h2{font-family:var(--kai);font-size:1.15rem;letter-spacing:.08em;color:var(--cyan);
+  border-bottom:1px solid var(--line);padding-bottom:6px;margin:26px 0 4px}
+h2 small{font-family:inherit;color:var(--muted);font-size:.72rem;letter-spacing:0;margin-left:8px}
+.row{display:flex;gap:12px;padding:9px 0;border-bottom:1px dashed rgba(148,178,255,.1);align-items:baseline}
+.w{font-family:var(--kai);font-size:1.18rem;letter-spacing:.1em;color:var(--gold);flex:0 0 6.2em;white-space:nowrap}
+.mk{font-size:.88rem;color:#c3cee6;margin:0}
+.ex{font-size:.8rem;color:var(--muted);margin:2px 0 0;padding-left:10px;border-left:2px solid rgba(56,189,248,.4)}
+.hide-ex .ex{display:none}
+@media (max-width:560px){.row{flex-direction:column;gap:2px}.w{flex:none}}
+@media print{
+  body{background:#fff;color:#111;padding:0;font-size:11pt}
+  .toolbar{display:none}
+  h1{color:#111}.sub{color:#555}
+  h2{color:#0369a1;break-after:avoid}
+  .w{color:#92400e}.mk{color:#222}.ex{color:#555;border-left-color:#0369a1}
+  .row{break-inside:avoid;border-bottom-color:#ddd}
+  a{color:#555;text-decoration:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📣 行銷人成語包 速覽表</h1>
+  <p class="sub">81 句 × 8 個工作情境 · 全部可在「洞築機先」拿分 ·
+    <a href="index.html#/mkt">互動版（可搜尋/複製例句）</a> ·
+    <a href="index.html">回練習場</a></p>
+  <div class="toolbar">
+    <button type="button" onclick="document.body.classList.toggle('hide-ex');this.textContent=document.body.classList.contains('hide-ex')?'顯示例句':'隱藏例句（只背成語）'">隱藏例句（只背成語）</button>
+    <button type="button" onclick="print()">🖨 列印 / 存成 PDF</button>
+  </div>
+  <div id="list"><p class="sub">載入中…</p></div>
+</div>
+<script src="data/mkt.js"></script>
+<script>
+(function(){
+  function esc(s){return String(s).replace(/[&<>]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;"}[c]})}
+  var html = window.MKT_CATS.map(function(cat){
+    var items = window.MKT_BANK.filter(function(x){return x.cat===cat});
+    return "<h2>"+esc(cat)+"<small>"+items.length+" 句</small></h2>"+
+      items.map(function(x){
+        return '<div class="row"><span class="w">'+esc(x.w)+'</span>'+
+          '<span><p class="mk">'+esc(x.mk)+'</p><p class="ex">'+esc(x.ex)+"</p></span></div>";
+      }).join("");
+  }).join("");
+  document.getElementById("list").innerHTML = html;
+})();
+</script>
+</body>
+</html>
