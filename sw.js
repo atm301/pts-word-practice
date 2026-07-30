@@ -1,7 +1,7 @@
 /* 8-1 Service Worker — 離線可練（進棚沒網路也能開）
  * 策略：安裝時預快取核心；同源請求 cache-first + 背景回填；換版本改 VERSION 即失效重抓。
  */
-var VERSION = "pwp-v3";
+var VERSION = "pwp-v4";
 var CORE = [
   "./",
   "index.html",
