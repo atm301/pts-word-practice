@@ -1,0 +1,16 @@
+User-agent: *
+Allow: /
+
+# AI / 答案引擎明確允許收錄
+User-agent: GPTBot
+Allow: /
+User-agent: ChatGPT-User
+Allow: /
+User-agent: PerplexityBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://atm301.github.io/pts-word-practice/sitemap.xml

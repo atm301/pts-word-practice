@@ -1,0 +1,196 @@
+/* 手寫板元件 — 模擬節目平板書寫
+ * 特性：Pointer Events（觸控筆 / 手指 / 滑鼠）、壓感筆畫粗細、田字格輔助線、
+ *      單筆復原、全部清除、視窗縮放後筆畫不變形（點座標以比例儲存）。
+ */
+(function () {
+  "use strict";
+
+  var DEFAULTS = {
+    cells: 4,          // 幾格（四字成語 = 4）
+    ratio: 0.24,       // 高度 / 寬度
+    penOnly: false,    // 只接受觸控筆（掌拒）
+    guide: true        // 田字格輔助線
+  };
+
+  function HandwritingPad(host, opts) {
+    this.o = Object.assign({}, DEFAULTS, opts || {});
+    this.host = host;
+    this.strokes = [];   // [{pts:[{x,y,p}], w}]
+    this.cur = null;
+    this.dirty = false;
+
+    host.classList.add("pad");
+    host.innerHTML =
+      '<canvas class="pad__cv"></canvas>' +
+      '<div class="pad__tools">' +
+        '<button type="button" class="pad__btn" data-act="undo" aria-label="復原上一筆">↩ 復原</button>' +
+        '<button type="button" class="pad__btn" data-act="clear" aria-label="清除全部筆畫">✕ 清除</button>' +
+      "</div>";
+
+    this.cv = host.querySelector(".pad__cv");
+    this.ctx = this.cv.getContext("2d");
+
+    var self = this;
+    host.querySelector('[data-act="undo"]').addEventListener("click", function (e) {
+      e.preventDefault(); self.undo();
+    });
+    host.querySelector('[data-act="clear"]').addEventListener("click", function (e) {
+      e.preventDefault(); self.clear();
+    });
+
+    this._bind();
+    this.resize();
+
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(function () { self.resize(); });
+      this._ro.observe(host);
+    } else {
+      this._onWinResize = function () { self.resize(); };
+      window.addEventListener("resize", this._onWinResize);
+    }
+  }
+
+  HandwritingPad.prototype._bind = function () {
+    var self = this, cv = this.cv;
+
+    function accept(e) {
+      if (!self.o.penOnly) return true;
+      return e.pointerType === "pen" || e.pointerType === "mouse";
+    }
+    function pos(e) {
+      var r = cv.getBoundingClientRect();
+      return {
+        x: (e.clientX - r.left) / r.width,
+        y: (e.clientY - r.top) / r.height,
+        p: e.pressure > 0 && e.pressure < 1 ? e.pressure : 0.5
+      };
+    }
+
+    cv.addEventListener("pointerdown", function (e) {
+      if (!accept(e)) return;
+      e.preventDefault();
+      cv.setPointerCapture(e.pointerId);
+      self.cur = { pts: [pos(e)] };
+      self.strokes.push(self.cur);
+      self.dirty = true;
+      self._draw();
+    });
+
+    cv.addEventListener("pointermove", function (e) {
+      if (!self.cur || !accept(e)) return;
+      e.preventDefault();
+      var evts = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      for (var i = 0; i < evts.length; i++) self.cur.pts.push(pos(evts[i]));
+      self._draw();
+    });
+
+    function end(e) {
+      if (!self.cur) return;
+      // 單點視為點（避免空筆畫）
+      if (self.cur.pts.length === 1) self.cur.pts.push(Object.assign({}, self.cur.pts[0]));
+      self.cur = null;
+      self._draw();
+      if (self.o.onChange) self.o.onChange(self);
+    }
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    cv.addEventListener("pointerleave", function (e) { if (self.cur) end(e); });
+
+    // 避免瀏覽器把手寫當成捲動/選取
+    cv.style.touchAction = "none";
+    cv.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  };
+
+  HandwritingPad.prototype.resize = function () {
+    var w = this.host.clientWidth || 320;
+    var h = Math.max(72, Math.round(w * this.o.ratio));
+    var dpr = Math.min(window.devicePixelRatio || 1, 3);
+    this.cv.style.width = "100%";
+    this.cv.style.height = h + "px";
+    this.cv.width = Math.round(w * dpr);
+    this.cv.height = Math.round(h * dpr);
+    this.dpr = dpr;
+    this._draw();
+  };
+
+  HandwritingPad.prototype._grid = function () {
+    var ctx = this.ctx, W = this.cv.width, H = this.cv.height, n = this.o.cells;
+    var pad = Math.round(H * 0.06);
+    var cell = (W - pad * (n + 1)) / n;
+    var top = pad, size = Math.min(cell, H - pad * 2);
+    var y0 = (H - size) / 2;
+
+    ctx.save();
+    for (var i = 0; i < n; i++) {
+      var x0 = pad + i * (cell + pad) + (cell - size) / 2;
+      // 外框
+      ctx.strokeStyle = "rgba(148,163,184,.55)";
+      ctx.lineWidth = Math.max(1, this.dpr);
+      ctx.strokeRect(x0, y0, size, size);
+      if (!this.o.guide) continue;
+      // 田字格
+      ctx.strokeStyle = "rgba(148,163,184,.3)";
+      ctx.setLineDash([Math.round(4 * this.dpr), Math.round(5 * this.dpr)]);
+      ctx.beginPath();
+      ctx.moveTo(x0 + size / 2, y0); ctx.lineTo(x0 + size / 2, y0 + size);
+      ctx.moveTo(x0, y0 + size / 2); ctx.lineTo(x0 + size, y0 + size / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    ctx.restore();
+  };
+
+  HandwritingPad.prototype._draw = function () {
+    var ctx = this.ctx, W = this.cv.width, H = this.cv.height;
+    ctx.clearRect(0, 0, W, H);
+    this._grid();
+
+    var base = Math.max(1.6, H * 0.028);
+    ctx.strokeStyle = getComputedStyle(this.host).getPropertyValue("--ink") || "#0f172a";
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    for (var s = 0; s < this.strokes.length; s++) {
+      var pts = this.strokes[s].pts;
+      if (pts.length < 2) continue;
+      for (var i = 1; i < pts.length; i++) {
+        var a = pts[i - 1], b = pts[i];
+        ctx.lineWidth = base * (0.55 + b.p * 1.2);
+        ctx.beginPath();
+        ctx.moveTo(a.x * W, a.y * H);
+        ctx.lineTo(b.x * W, b.y * H);
+        ctx.stroke();
+      }
+    }
+  };
+
+  HandwritingPad.prototype.undo = function () {
+    this.strokes.pop();
+    this._draw();
+    if (this.o.onChange) this.o.onChange(this);
+  };
+
+  HandwritingPad.prototype.clear = function () {
+    this.strokes = [];
+    this.dirty = false;
+    this._draw();
+    if (this.o.onChange) this.o.onChange(this);
+  };
+
+  HandwritingPad.prototype.isBlank = function () { return this.strokes.length === 0; };
+
+  HandwritingPad.prototype.setPenOnly = function (v) { this.o.penOnly = !!v; };
+
+  HandwritingPad.prototype.setCells = function (n) {
+    this.o.cells = n;
+    this._draw();
+  };
+
+  HandwritingPad.prototype.destroy = function () {
+    if (this._ro) this._ro.disconnect();
+    if (this._onWinResize) window.removeEventListener("resize", this._onWinResize);
+    this.host.innerHTML = "";
+  };
+
+  window.HandwritingPad = HandwritingPad;
+})();
