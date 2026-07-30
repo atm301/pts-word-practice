@@ -1,11 +1,20 @@
 /* 1-1 手寫辨識 — HanziLookupJS（GPL-3.0，vendor/ 內含原始碼連結）
- * 流程：交卷 → 每格筆畫送辨識 → 轉成文字 → 走與打字模式相同的自動批改，仍可 ✓/✗ 人工覆核。
+ * 流程：交卷 → 每格筆畫送辨識取候選 → 「字典約束解碼」組出最合理的詞 → 走打字模式批改，仍可 ✓/✗ 覆核。
+ * 準確度策略（v2）：
+ *   1. looseness 0.15 → 0.30：筆形比對更寬容（寫醜一點也認得）
+ *   2. 每格取前 20 名候選，而非只信第 1 名
+ *   3. 字典約束：候選組合先對合法詞庫（成語庫／題目答案清單）比對，像哪個詞就認哪個詞
+ *   4. 已知正解（expected）在候選前 20 名內就直接採納
  * 引擎與資料（~830KB）只在手寫回合第一次開始時載入。
  */
 (function () {
   "use strict";
 
-  var state = "idle";        // idle | loading | ready | failed
+  var LOOSENESS = 0.30;
+  var CAND_N = 20;        // 每格保留的候選數
+  var LEX_DEPTH = 12;     // 字典比對時，每格看前幾名
+
+  var state = "idle";
   var waiters = [];
 
   function loadScript(src) {
@@ -20,7 +29,7 @@
 
   function load() {
     if (state === "ready") return Promise.resolve();
-    if (state === "loading" || state === "failed" && waiters.length) {
+    if (state === "loading") {
       return new Promise(function (res, rej) { waiters.push([res, rej]); });
     }
     state = "loading";
@@ -40,33 +49,77 @@
     if (!cellStrokes.length || state !== "ready") return [];
     try {
       var ac = new window.HanziLookup.AnalyzedCharacter(cellStrokes);
-      var matcher = new window.HanziLookup.Matcher("mmah");
+      var matcher = new window.HanziLookup.Matcher("mmah", LOOSENESS);
       var out = [];
-      matcher.match(ac, limit || 8, function (matches) {
+      matcher.match(ac, limit || CAND_N, function (matches) {
         out = (matches || []).map(function (m) { return m.character; });
       });
       return out;
     } catch (e) { return []; }
   }
 
-  /* pad → 逐格轉錄。expected（可為 null）＝已知正解字串：
-   * 若正解該位置的字出現在該格候選前 8 名，就採納正解字（降低辨識誤殺）。 */
-  function transcribe(pad, expected) {
-    var byCell = pad.strokesByCell();
-    var chars = byCell.map(function (cs, ci) {
-      var cand = candidates(cs, 8);
+  /* 字典約束解碼（純函式，可單測）
+   * candLists：每格候選字陣列（空格為 []）
+   * opts.expected：已知正解字串（逐格 snap，"＿" 表示該格不指定）
+   * opts.lockPos：{ i, ch } 指定第 i 格必須是 ch（拾字路口的關鍵字位置）
+   * opts.lexicon：合法詞清單；候選組合能拼出清單內的詞就採納（取各格名次和最小者）
+   */
+  function decodeCells(candLists, opts) {
+    opts = opts || {};
+    var n = candLists.length;
+    var inked = [];                      // 有筆跡的格 index（保持順序）
+    for (var i = 0; i < n; i++) if (candLists[i].length) inked.push(i);
+
+    function rankOf(ci, ch, depth) {
+      var r = candLists[ci].indexOf(ch);
+      return (r >= 0 && r < (depth || CAND_N)) ? r : -1;
+    }
+
+    // 1) 字典比對：找「長度＝有墨格數」且每字都在該格前 LEX_DEPTH 名的詞，名次和最小者勝
+    if (opts.lexicon && inked.length) {
+      var best = null, bestScore = Infinity;
+      for (var w = 0; w < opts.lexicon.length; w++) {
+        var word = opts.lexicon[w];
+        if (word.length !== inked.length) continue;
+        if (opts.lockPos && word[opts.lockPos.i] !== opts.lockPos.ch) continue;
+        var score = 0, ok = true;
+        for (var k = 0; k < word.length; k++) {
+          var r = rankOf(inked[k], word[k], LEX_DEPTH);
+          if (r < 0) { ok = false; break; }
+          score += r;
+        }
+        if (ok && score < bestScore) { bestScore = score; best = word; }
+      }
+      if (best) {
+        var chars0 = candLists.map(function () { return ""; });
+        for (var k2 = 0; k2 < best.length; k2++) chars0[inked[k2]] = best[k2];
+        return { text: best, chars: chars0, via: "lexicon" };
+      }
+    }
+
+    // 2) 逐格：expected / lockPos 在候選內就採納，否則取第 1 名
+    var chars = candLists.map(function (cand, ci) {
       if (!cand.length) return "";
-      if (expected && expected[ci] && cand.indexOf(expected[ci]) >= 0) return expected[ci];
+      if (opts.lockPos && opts.lockPos.i === ci && rankOf(ci, opts.lockPos.ch) >= 0) return opts.lockPos.ch;
+      var exp = opts.expected && opts.expected[ci];
+      if (exp && exp !== "＿" && rankOf(ci, exp) >= 0) return exp;
       return cand[0];
     });
-    // 尾端空格剔除（寫三個字留一格空）
-    var txt = chars.join("").replace(/\s+/g, "");
-    return { text: txt, chars: chars };
+    return { text: chars.join(""), chars: chars, via: "top1" };
+  }
+
+  /* pad → 逐格候選 → 解碼成文字 */
+  function transcribe(pad, opts) {
+    var byCell = pad.strokesByCell();
+    var candLists = byCell.map(function (cs) { return candidates(cs, CAND_N); });
+    return decodeCells(candLists, opts || {});
   }
 
   window.PWPRecog = {
     load: load,
     transcribe: transcribe,
+    decodeCells: decodeCells,
+    candidates: candidates,
     isReady: function () { return state === "ready"; },
     hasFailed: function () { return state === "failed"; }
   };

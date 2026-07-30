@@ -203,24 +203,28 @@
     return rects;
   };
 
-  /* 依「筆畫重心落在哪一格」分段，輸出各格筆畫（格內 0~256 座標，供辨識引擎） */
+  /* 筆畫分格：逐點投票（多數點落在哪格就算哪格），比重心法更耐「寫大壓線」。
+   * 輸出各格筆畫（格內 0~256 座標，供辨識引擎）。 */
   HandwritingPad.prototype.strokesByCell = function () {
     var rects = this.cellRects();
     var out = rects.map(function () { return []; });
     this.strokes.forEach(function (st) {
       var pts = st.pts;
       if (!pts.length) return;
-      var cx = 0;
-      for (var i = 0; i < pts.length; i++) cx += pts[i].x;
-      cx /= pts.length;
-      // 重心最近的格（用格中心距離，寫超出邊界也能歸位）
-      var best = 0, bd = Infinity;
-      rects.forEach(function (r, ri) {
-        var d = Math.abs(cx - (r.x + r.w / 2));
-        if (d < bd) { bd = d; best = ri; }
+      var votes = rects.map(function () { return 0; });
+      pts.forEach(function (p) {
+        var best = 0, bd = Infinity;
+        rects.forEach(function (r, ri) {
+          // 點在格內距離 0；格外用到格中心的距離
+          var d = (p.x >= r.x && p.x <= r.x + r.w) ? 0 : Math.abs(p.x - (r.x + r.w / 2));
+          if (d < bd) { bd = d; best = ri; }
+        });
+        votes[best]++;
       });
-      var r = rects[best];
-      out[best].push(pts.map(function (p) {
+      var win = 0;
+      votes.forEach(function (v, i) { if (v > votes[win]) win = i; });
+      var r = rects[win];
+      out[win].push(pts.map(function (p) {
         return [
           Math.round(((p.x - r.x) / r.w) * 256),
           Math.round(((p.y - r.y) / r.h) * 256)

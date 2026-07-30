@@ -62,7 +62,7 @@
           cells: +h.getAttribute("data-cells"),
           penOnly: S.settings.penOnly,
           guide: S.settings.guide,
-          ratio: +h.getAttribute("data-cells") === 1 ? 0.9 : 0.26
+          ratio: +h.getAttribute("data-cells") === 1 ? 0.9 : 0.34   // 格子放大：筆畫解析度越高辨識越準
         });
         var qi = +h.getAttribute("data-q"), si = +h.getAttribute("data-s");
         (pads[qi] || (pads[qi] = []))[si] = pad;
@@ -155,8 +155,9 @@
           var txt, srcLabel = "";
           if (hand) {
             var pad = pads[qi] && pads[qi][si];
-            var expected = cfg.expectedOf ? cfg.expectedOf(item, si) : null;
-            txt = pad && !pad.isBlank() ? window.PWPRecog.transcribe(pad, expected).text : "";
+            var rOpts = cfg.recogOpts ? cfg.recogOpts(item, si) : {};
+            if (!rOpts.expected && cfg.expectedOf) rOpts.expected = cfg.expectedOf(item, si);
+            txt = pad && !pad.isBlank() ? window.PWPRecog.transcribe(pad, rOpts).text : "";
             srcLabel = '<span class="rrow__tag">辨識</span>';
           } else {
             txt = textOf(qi, si);
@@ -386,6 +387,7 @@
       slotsOf: function () { return [{ cells: 4 }]; },
       refOf: function (it) { return it.answer; },
       expectedOf: function (it) { return it.answer; },
+      recogOpts: function (it) { return { expected: it.answer, lexicon: [it.answer].concat(it.alt || []) }; },
       gradeOf: function (it, si, txt) {
         var ok = txt === it.answer || (it.alt || []).indexOf(txt) >= 0;
         return { ok: ok, why: txt ? "" : "沒作答", canOverride: false };
@@ -422,8 +424,9 @@
       renderQ: crossQ,
       slotsOf: function () { return [{ cells: 3, hint: "第 1 句" }, { cells: 3, hint: "第 2 句" }]; },
       refOf: function (it, si) { return it.answers.slice(si * 3, si * 3 + 3).join("、"); },
-      expectedOf: function (it) {
-        var a = ["＿", "＿", "＿"]; a[it.pos - 1] = it.key; return a.join("");   // 只提示關鍵字位置，其餘取辨識首選
+      recogOpts: function (it) {
+        // 關鍵字位置鎖定 + 已知合法答案當字典：像哪個詞就認哪個詞
+        return { lockPos: { i: it.pos - 1, ch: it.key }, lexicon: it.answers };
       },
       gradeOf: function (it, si, txt, ctx) {
         if (!txt) return { ok: false, why: "沒作答" };
@@ -531,6 +534,7 @@
           for (var i = 0; i < it.__need; i++) a.push({ cells: 4, hint: "第 " + (i + 1) + " 句" });
           return a;
         },
+        recogOpts: function () { return { lexicon: P.idioms().list }; },   // 全成語庫當字典：像成語就往成語認
         refOf: function (it, si) {
           if (S.settings.input === "hand") return "任一符合條件的成語（參考解答見下方）";
           return refs[si % Math.max(1, refs.length)] || "—";
@@ -736,6 +740,7 @@
           "<li><b>手寫模式</b>：模擬節目的平板書寫。時間到揭曉正解，自己按 ✓／✗ 評分——這也是節目的判定方式（人工認定）。</li>" +
           "<li><b>打字模式</b>：自動批改，適合通勤時大量刷題。收錄清單以外的合理答案，可按「我確定這是對的」自行加分。</li>" +
           "<li><b>只接受觸控筆</b>：開了之後手掌碰到螢幕不會畫出線，接近節目現場的手感。</li>" +
+          "<li><b>自動辨識怎麼寫最準</b>：辨識引擎是照「標準筆順」比對筆畫的——一筆一筆分開寫、照筆順、字寫在格子中央越大越好；連筆草寫或筆順亂跳會明顯掉準度。辨識錯了直接按 ✓/✗ 改判即可，不影響計分權在你手上。</li>" +
         "</ul>" +
         "<h3>資料來源</h3>" +
         '<ul class="steps">' +
