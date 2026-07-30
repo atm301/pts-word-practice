@@ -581,7 +581,7 @@
 
   // ══════════════════════════════════════════ 註冊視圖
   /* 8-2 lazy load：進單元才載題庫（chain 另需成語庫做批改） */
-  var DATA_DEPS = { pic: ["pic"], cross: ["cross"], gem: ["gem"], chain: ["chain", "idioms", "moe"] };
+  var DATA_DEPS = { pic: ["pic"], cross: ["cross"], gem: ["gem"], chain: ["chain", "idioms", "moe", "mkt"] };
   ["pic", "cross", "gem", "chain"].forEach(function (k) {
     P.VIEWS[k] = function (root, args) {
       root.innerHTML = '<section class="panel"><p class="muted">題庫載入中…</p></section>';
@@ -606,6 +606,76 @@
       });
     };
   });
+
+  // ══════════════════════════════════════════ 行銷人成語包
+  P.VIEWS.mkt = function (root) {
+    root.innerHTML = '<section class="panel"><p class="muted">成語包載入中…</p></section>';
+    P.ensureData(["mkt"]).then(function () {
+      var cats = window.MKT_CATS, bank = window.MKT_BANK;
+      var cur = "全部", q = "";
+
+      function cards() {
+        var list = bank.filter(function (x) {
+          if (cur !== "全部" && x.cat !== cur) return false;
+          if (q && (x.w + x.mk + x.ex).indexOf(q) < 0) return false;
+          return true;
+        });
+        if (!list.length) return '<p class="muted">沒有符合的成語，換個關鍵字試試。</p>';
+        return list.map(function (x, i) {
+          return '<article class="mcard">' +
+            '<div class="mcard__top"><span class="mcard__w">' + esc(x.w) + '</span>' +
+            '<span class="chip">' + esc(x.cat) + "</span></div>" +
+            '<p class="mcard__mk">' + esc(x.mk) + "</p>" +
+            '<blockquote class="mcard__ex">' + esc(x.ex) + "</blockquote>" +
+            '<button type="button" class="btn btn--sm mcard__copy" data-i="' + bank.indexOf(x) + '">複製例句</button>' +
+            "</article>";
+        }).join("");
+      }
+
+      function paint() {
+        $("#mktCount").textContent = "共 " + bank.length + " 句 · 顯示 " +
+          bank.filter(function (x) { return (cur === "全部" || x.cat === cur) && (!q || (x.w + x.mk + x.ex).indexOf(q) >= 0); }).length + " 句";
+        $("#mktList").innerHTML = cards();
+        $$(".mcard__copy").forEach(function (b) {
+          b.addEventListener("click", function () {
+            var x = bank[+b.getAttribute("data-i")];
+            var txt = x.w + "——" + x.ex;
+            if (navigator.clipboard) navigator.clipboard.writeText(txt).then(function () { P.toast("已複製：" + x.w); });
+            P.track("mkt_copy", { idiom: x.w });
+          });
+        });
+      }
+
+      root.innerHTML =
+        '<section class="panel">' +
+          '<div class="uhead"><span class="uhead__ic">📣</span>' +
+            "<div><h2>行銷人成語包</h2>" +
+            '<p class="muted">' + bank.length + " 句廣告行銷工作用得上的成語：提案、文案、投放、口碑、危機都有。每句附行銷解讀＋可直接抄的例句，也全部併入「洞築機先」的批改詞庫。</p></div></div>" +
+          '<div class="mkt-bar">' +
+            '<div class="mkt-cats">' +
+              ["全部"].concat(cats).map(function (c) {
+                return '<button type="button" class="mchip' + (c === "全部" ? " is-on" : "") + '" data-cat="' + esc(c) + '">' + esc(c) + "</button>";
+              }).join("") +
+            "</div>" +
+            '<input class="mkt-q" id="mktQ" type="search" placeholder="搜成語或關鍵字…" aria-label="搜尋成語">' +
+          "</div>" +
+          '<p class="muted" id="mktCount"></p>' +
+          '<div class="mgrid" id="mktList"></div>' +
+        "</section>";
+
+      $$(".mchip").forEach(function (b) {
+        b.addEventListener("click", function () {
+          cur = b.getAttribute("data-cat");
+          $$(".mchip").forEach(function (x) { x.classList.toggle("is-on", x === b); });
+          paint();
+        });
+      });
+      var qEl = $("#mktQ");
+      qEl.addEventListener("input", function () { q = qEl.value.trim(); paint(); });
+      paint();
+      P.track("mkt_open");
+    });
+  };
 
   // ══════════════════════════════════════════ 統計
   P.VIEWS.stats = function (root) {

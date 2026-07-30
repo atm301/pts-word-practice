@@ -149,6 +149,19 @@ await page.waitForTimeout(200);
 log("手寫自評後:", (await page.locator(".result__score").innerText()).replace(/\s+/g, " "));
 await page.screenshot({ path: path.join(SHOT, "21-hand-result.png"), fullPage: true });
 
+// ── 行銷成語包
+await page.goto(BASE + "/#/mkt", { waitUntil: "networkidle" });
+await page.waitForSelector(".mcard", { timeout: 5000 });
+log("\n行銷成語包卡片:", await page.locator(".mcard").count());
+await page.click('.mchip[data-cat="危機處理"]');
+await page.waitForTimeout(150);
+log("危機處理分類:", await page.locator(".mcard").count(), "張");
+await page.click('.mchip[data-cat="全部"]');
+await page.fill("#mktQ", "提案");
+await page.waitForTimeout(150);
+log("搜「提案」（全部分類）:", await page.locator(".mcard").count(), "張");
+await page.screenshot({ path: path.join(SHOT, "50-mkt.png"), fullPage: false });
+
 // ── 紀錄 / 規則頁
 for (const [h, f] of [["#/stats", "30-stats.png"], ["#/rules", "31-rules.png"], ["#/daily", "32-daily.png"]]) {
   await page.goto(BASE + "/" + h, { waitUntil: "networkidle" });

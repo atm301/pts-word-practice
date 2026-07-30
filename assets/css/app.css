@@ -10,7 +10,7 @@
   --r:14px;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%; scrollbar-gutter:stable}   /* 捲軸出現/消失不再改變版面寬度（抖動主因之一） */
 body{
   margin:0; font-family:var(--font); color:var(--text); line-height:1.65;
   background:
@@ -144,6 +144,7 @@ kbd{font:inherit; font-size:.68rem; border:1px solid var(--line); border-radius:
 .round__meta b{font-family:var(--kai); font-size:1.16rem; letter-spacing:.05em; display:block}
 .round__meta span{font-size:.8rem}
 .round__clock{margin-left:auto; font-variant-numeric:tabular-nums; color:var(--gold); font-weight:800; font-size:1.9rem; line-height:1}
+.round__clock span{display:inline-block; min-width:4.2ch; text-align:right}   /* 90.0→9.9 位數變少也不縮寬，時鐘不再帶著整列抖 */
 .round__clock small{font-size:.62rem; color:var(--muted); font-weight:500; margin-left:2px}
 .round__clock.is-off{color:var(--muted)}
 .round__bar{height:7px; background:var(--panel2); border-radius:99px; overflow:hidden; margin-bottom:18px}
@@ -302,6 +303,21 @@ kbd{font:inherit; font-size:.68rem; border:1px solid var(--line); border-radius:
 }
 .chainq p{font-size:.92rem; margin:0}
 .chainq b{color:var(--gold)}
+
+/* ══ 行銷成語包 ══ */
+.mkt-bar{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:14px 0 6px}
+.mkt-cats{display:flex; gap:6px; flex-wrap:wrap}
+.mchip{border:1px solid var(--line); background:var(--panel); color:var(--muted); font:inherit; font-size:.82rem; padding:5px 13px; border-radius:99px; cursor:pointer}
+.mchip.is-on{background:var(--cyan); color:#03121e; font-weight:700; border-color:transparent}
+.mkt-q{font:inherit; font-size:.9rem; padding:8px 14px; border-radius:99px; border:1px solid var(--line); background:var(--bg2); color:var(--text); min-width:200px; flex:1}
+.mkt-q:focus{outline:2px solid var(--cyan); outline-offset:1px}
+.mgrid{display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); margin-top:10px}
+.mcard{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:16px; display:flex; flex-direction:column; gap:8px}
+.mcard__top{display:flex; justify-content:space-between; align-items:center}
+.mcard__w{font-family:var(--kai); font-size:1.5rem; letter-spacing:.12em; color:var(--gold)}
+.mcard__mk{font-size:.86rem; color:#b6c3dc; margin:0}
+.mcard__ex{margin:0; padding:9px 12px; border-left:3px solid var(--cyan); background:rgba(56,189,248,.06); border-radius:0 8px 8px 0; font-size:.84rem; color:#cbd7ec}
+.mcard__copy{align-self:flex-start; margin-top:auto}
 
 /* ══ 統計 ══ */
 .tw{overflow-x:auto; margin-bottom:1em}

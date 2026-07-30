@@ -1,7 +1,7 @@
 /* 8-1 Service Worker — 離線可練（進棚沒網路也能開）
  * 策略：安裝時預快取核心；同源請求 cache-first + 背景回填；換版本改 VERSION 即失效重抓。
  */
-var VERSION = "pwp-v2";
+var VERSION = "pwp-v3";
 var CORE = [
   "./",
   "index.html",
@@ -18,6 +18,7 @@ var CORE = [
   "data/cross.js",
   "data/gem.js",
   "data/chain.js",
+  "data/mkt.js",
   "assets/img/og.png",
   "assets/img/icon-180.png",
   "assets/img/icon-192.png",

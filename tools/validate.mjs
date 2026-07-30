@@ -15,7 +15,7 @@ function load(file, ctx) {
   vm.runInContext(fs.readFileSync(path.join(ROOT, file), "utf8"), ctx, { filename: file });
 }
 const ctx = vm.createContext({ window: {} });
-["data/idioms.js", "data/idioms-moe.js", "data/pic.js", "data/cross.js", "data/gem.js", "data/chain.js"]
+["data/idioms.js", "data/idioms-moe.js", "data/pic.js", "data/cross.js", "data/gem.js", "data/chain.js", "data/mkt.js"]
   .forEach(f => load(f, ctx));
 const W = ctx.window;
 
@@ -72,6 +72,19 @@ W.CHAIN_BANK.forEach(it => {
   if (n < 12) errs.push(`chain ${it.id}（${it.label || it.key}）庫內僅 ${n} 句 <12`);
 });
 
+// ── 行銷成語包（詞庫同步併入批改）
+const setPlusMkt = new Set([...set, ...W.MKT_BANK.map(x => x.w)]);
+{
+  const seen = new Set();
+  W.MKT_BANK.forEach(x => {
+    if (!/^[一-鿿]{4}$/.test(x.w || "")) errs.push(`mkt 非四字成語：${x.w}`);
+    if (!W.MKT_CATS.includes(x.cat)) errs.push(`mkt ${x.w} 分類不在 MKT_CATS：${x.cat}`);
+    if (!x.mk || !x.ex) errs.push(`mkt ${x.w} 缺 mk/ex`);
+    if (seen.has(x.w)) errs.push(`mkt 重複：${x.w}`);
+    seen.add(x.w);
+  });
+}
+
 // ── HTML 安全（6-1/6-3）
 for (const f of ["index.html", "privacy.html"]) {
   const html = fs.readFileSync(path.join(ROOT, f), "utf8");
@@ -95,7 +108,7 @@ const sw = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
   if (!fs.existsSync(path.join(ROOT, f))) errs.push(`sw.js 預快取指向不存在的檔案：${f}`);
 });
 
-console.log(`題庫：pic ${W.PIC_BANK.length}、cross ${W.CROSS_BANK.length}、gem ${W.GEM_BANK.length}、chain ${W.CHAIN_BANK.length}、成語 ${set.size}`);
+console.log(`題庫：pic ${W.PIC_BANK.length}、cross ${W.CROSS_BANK.length}、gem ${W.GEM_BANK.length}、chain ${W.CHAIN_BANK.length}、mkt ${W.MKT_BANK.length}、成語 ${setPlusMkt.size}`);
 warn.forEach(w => console.log("⚠", w));
 if (errs.length) {
   console.error(`\n✗ ${errs.length} 個問題：`);

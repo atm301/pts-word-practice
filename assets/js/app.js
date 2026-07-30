@@ -95,7 +95,8 @@
     pic: "data/pic.js",
     cross: "data/cross.js",
     gem: "data/gem.js",
-    chain: "data/chain.js"
+    chain: "data/chain.js",
+    mkt: "data/mkt.js"
   };
   var _dataP = {};
   function ensureData(keys) {
@@ -219,12 +220,13 @@
   function idioms() {
     var src = (window.IDIOMS || []);
     var moe = (window.IDIOMS_MOE || []);
-    var key = src.length + moe.length;           // 資料檔 lazy 載入後自動重建索引
+    var mkt = (window.MKT_BANK || []).map(function (x) { return x.w; });
+    var key = src.length + moe.length + mkt.length;   // 資料檔 lazy 載入後自動重建索引
     if (!IDIOM_SET || IDIOM_KEY !== key) {
       IDIOM_KEY = key;
       IDIOM_SET = {};
       IDIOM_LIST = [];
-      src.concat(moe).forEach(function (s) {
+      src.concat(mkt, moe).forEach(function (s) {
         if (!IDIOM_SET[s]) { IDIOM_SET[s] = 1; IDIOM_LIST.push(s); }
       });
     }
@@ -328,6 +330,7 @@
         '<p class="hero__sub">給行銷人與廣告人的手寫國文特訓。四個單元、真實秒數、平板手寫作答——把「腦子裡有但寫不出來」練成反射動作。</p>' +
         '<div class="hero__row">' +
           '<a class="btn btn--primary" href="#/daily">今日挑戰 <b>' + doneCount + "/4</b></a>" +
+          '<a class="btn" href="#/mkt">📣 行銷成語包</a>' +
           '<a class="btn" href="#/rules">單元規則</a>' +
           '<button class="btn" id="shareBtn" type="button">分享給隊友</button>' +
         "</div>" +

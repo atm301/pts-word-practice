@@ -42,7 +42,15 @@
     this.resize();
 
     if (window.ResizeObserver) {
-      this._ro = new ResizeObserver(function () { self.resize(); });
+      // rAF 合併 + 寬度 guard：sub-pixel 變化不重繪，避免 RO→resize→RO 抖動循環
+      this._ro = new ResizeObserver(function () {
+        if (self._roRaf) return;
+        self._roRaf = requestAnimationFrame(function () {
+          self._roRaf = null;
+          var w = self.host.clientWidth;
+          if (Math.abs(w - (self._lastW || 0)) >= 1) self.resize();
+        });
+      });
       this._ro.observe(host);
     } else {
       this._onWinResize = function () { self.resize(); };
@@ -103,6 +111,7 @@
 
   HandwritingPad.prototype.resize = function () {
     var w = this.host.clientWidth || 320;
+    this._lastW = w;
     var h = Math.max(72, Math.round(w * this.o.ratio));
     var dpr = Math.min(window.devicePixelRatio || 1, 3);
     this.cv.style.width = "100%";
