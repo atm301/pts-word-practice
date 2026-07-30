@@ -43,11 +43,12 @@
 
     root.innerHTML =
       '<section class="round">' +
+        '<span class="sr-only" aria-live="assertive" id="srLive"></span>' +
         '<div class="round__head">' +
           '<div class="round__meta"><b>' + esc(cfg.label) + "</b>" +
             '<span class="muted">' + esc(cfg.sub || "") + "</span></div>" +
-          '<div class="round__clock"><span id="rClock">' + cfg.sec.toFixed(1) + '</span><small>秒</small></div>' +
-          '<button class="btn btn--sm" id="rDone" type="button">交卷</button>' +
+          '<div class="round__clock" aria-hidden="true"><span id="rClock">' + cfg.sec.toFixed(1) + '</span><small>秒</small></div>' +
+          '<button class="btn btn--sm" id="rDone" type="button" title="也可按 Esc 交卷">交卷 <kbd>Esc</kbd></button>' +
         "</div>" +
         '<div class="round__bar"><div class="round__fill" id="rFill"></div></div>' +
         '<div class="qlist' + (cfg.wide ? " is-wide" : "") + '">' + qs + "</div>" +
@@ -81,14 +82,28 @@
       var f = $(".tin", root); if (f) f.focus();
     }
 
-    // 計時
+    // 手寫 + 開自動辨識 → 先在背景載引擎（首次 ~830KB）
+    if (hand && S.settings.recog && window.PWPRecog) {
+      window.PWPRecog.load().catch(function () {});
+    }
+
+    // 計時（7-1：剩 10 秒用 aria-live 報時）
+    var announced10 = false;
     timer = new P.Timer(cfg.sec, function (left, total) {
       $("#rClock").textContent = left.toFixed(1);
       $("#rFill").style.width = (left / total * 100) + "%";
       $("#rFill").classList.toggle("is-hot", left / total < 0.25);
+      if (!announced10 && left <= 10 && left > 0 && total > 12) {
+        announced10 = true;
+        var live = $("#srLive"); if (live) live.textContent = "剩下 10 秒";
+      }
     }, finish);
     timer.start();
     $("#rDone").addEventListener("click", finish);
+
+    // 7-2：Esc 交卷
+    function onKey(e) { if (e.key === "Escape") { e.preventDefault(); finish(); } }
+    document.addEventListener("keydown", onKey);
 
     function textOf(qi, si) {
       var el = inputs[qi] && inputs[qi][si];
@@ -99,8 +114,25 @@
       if (finished) return;
       finished = true;
       timer.stop();
+      document.removeEventListener("keydown", onKey);
       $("#rDone").disabled = true;
       $("#rClock").parentNode.classList.add("is-off");
+      var live = $("#srLive"); if (live) live.textContent = "時間到，開始核對答案";
+
+      // 1-2 鎖書寫並加「重播筆跡」
+      if (hand) pads.forEach(function (qa) { (qa || []).forEach(function (p) { if (p) p.freezeWithReplay(); }); });
+
+      // 1-1 手寫辨識：轉錄文字後走與打字相同的自動批改
+      var useRecog = hand && S.settings.recog && window.PWPRecog && window.PWPRecog.isReady();
+      if (hand && S.settings.recog && !useRecog && window.PWPRecog && !window.PWPRecog.hasFailed()) {
+        P.toast("辨識引擎還在載入，本輪請手動自評");
+      }
+
+      // 揭曉列：sr 文字（7-3 不只靠顏色）
+      function signOf(ok) {
+        return '<span class="rrow__sign">' + (ok ? "✓" : "✗") +
+          '<span class="sr-only">' + (ok ? "答對" : "答錯") + "</span></span>";
+      }
 
       items.forEach(function (item, qi) {
         var slots = cfg.slotsOf(item);
@@ -108,24 +140,37 @@
         var ctx = { used: {} };
         var rows = slots.map(function (sl, si) {
           var ref = cfg.refOf(item, si);
-          if (hand) {
+          var ynBtns =
+            '<span class="rrow__btns">' +
+              '<button type="button" class="mk mk--y" data-mk="1">✓ 寫對了</button>' +
+              '<button type="button" class="mk mk--n" data-mk="0">✗ 沒寫對</button>' +
+            "</span>";
+
+          if (hand && !useRecog) {
             marks[qi][si] = null;
             return '<div class="rrow" data-q="' + qi + '" data-s="' + si + '">' +
-              '<span class="rrow__ref">' + esc(ref) + "</span>" +
-              '<span class="rrow__btns">' +
-                '<button type="button" class="mk mk--y" data-mk="1">✓ 寫對了</button>' +
-                '<button type="button" class="mk mk--n" data-mk="0">✗ 沒寫對</button>' +
-              "</span></div>";
+              '<span class="rrow__ref">' + esc(ref) + "</span>" + ynBtns + "</div>";
           }
-          var txt = textOf(qi, si);
+
+          var txt, srcLabel = "";
+          if (hand) {
+            var pad = pads[qi] && pads[qi][si];
+            var expected = cfg.expectedOf ? cfg.expectedOf(item, si) : null;
+            txt = pad && !pad.isBlank() ? window.PWPRecog.transcribe(pad, expected).text : "";
+            srcLabel = '<span class="rrow__tag">辨識</span>';
+          } else {
+            txt = textOf(qi, si);
+          }
           var res = cfg.gradeOf(item, si, txt, ctx);
           marks[qi][si] = !!res.ok;
           return '<div class="rrow ' + (res.ok ? "is-ok" : "is-no") + '" data-q="' + qi + '" data-s="' + si + '">' +
+            srcLabel +
             '<span class="rrow__you">' + (txt ? esc(txt) : "（空白）") + "</span>" +
-            '<span class="rrow__sign">' + (res.ok ? "✓" : "✗") + "</span>" +
+            signOf(res.ok) +
             '<span class="rrow__ref">' + esc(ref) + "</span>" +
             (!res.ok && res.why ? '<span class="rrow__why">' + esc(res.why) + "</span>" : "") +
-            (!res.ok && res.canOverride ? '<button type="button" class="mk mk--ov" data-ov="1">我確定這是對的</button>' : "") +
+            (hand ? ynBtns
+                  : (!res.ok && res.canOverride ? '<button type="button" class="mk mk--ov" data-ov="1">我確定這是對的</button>' : "")) +
             "</div>";
         }).join("");
 
@@ -142,12 +187,17 @@
           if (b.hasAttribute("data-ov")) {
             marks[qi][si] = true; overs[qi][si] = true;
             row.classList.remove("is-no"); row.classList.add("is-ok");
-            row.querySelector(".rrow__sign").textContent = "✓";
+            row.querySelector(".rrow__sign").innerHTML = '✓<span class="sr-only">答對</span>';
             b.remove();
           } else {
-            marks[qi][si] = b.getAttribute("data-mk") === "1";
+            var v = b.getAttribute("data-mk") === "1";
+            marks[qi][si] = v;
             $$(".mk", row).forEach(function (x) { x.classList.remove("is-on"); });
             b.classList.add("is-on");
+            row.classList.toggle("is-ok", v);
+            row.classList.toggle("is-no", !v);
+            var sg = row.querySelector(".rrow__sign");
+            if (sg) sg.innerHTML = (v ? "✓" : "✗") + '<span class="sr-only">' + (v ? "答對" : "答錯") + "</span>";
           }
           renderResult();
         });
@@ -168,8 +218,12 @@
         });
         $$(".rrow", root).forEach(function (row) {
           $$(".mk", row).forEach(function (x) {
-            x.classList.toggle("is-on", (x.getAttribute("data-mk") === "1") === v);
+            if (x.hasAttribute("data-mk")) x.classList.toggle("is-on", (x.getAttribute("data-mk") === "1") === v);
           });
+          row.classList.toggle("is-ok", v);
+          row.classList.toggle("is-no", !v);
+          var sg = row.querySelector(".rrow__sign");
+          if (sg) sg.innerHTML = (v ? "✓" : "✗") + '<span class="sr-only">' + (v ? "答對" : "答錯") + "</span>";
         });
         renderResult();
       }
@@ -237,7 +291,7 @@
   // ══════════════════════════════════════════ 單元啟動頁
   function unitHome(root, key, sub) {
     var u = UNITS[key];
-    var wrongN = (S.wrong[key] || []).length;
+    var dueN = P.dueIds(key).length, allWrongN = P.wrongIds(key).length;
     var st = S.stats[key] || { rounds: 0, got: 0, total: 0 };
     root.innerHTML =
       '<section class="panel">' +
@@ -250,7 +304,7 @@
         '<div class="hero__row">' +
           '<button class="btn btn--primary" id="startBtn" type="button">開始實戰</button>' +
           '<button class="btn" id="slowBtn" type="button">慢練（放寬 3 倍時間）</button>' +
-          (wrongN ? '<button class="btn" id="wrongBtn" type="button">練錯題（' + wrongN + "）</button>" : "") +
+          (allWrongN ? '<button class="btn" id="wrongBtn" type="button">複習錯題（今日到期 ' + dueN + "／全部 " + allWrongN + "）</button>" : "") +
         "</div>" +
         (st.rounds ? '<p class="muted">你在這個單元練了 ' + st.rounds + " 輪，累積正確率 " +
           Math.round(st.got / Math.max(1, st.total) * 100) + "%。</p>" : "") +
@@ -312,7 +366,8 @@
 
   function bankFor(key, bank, mode) {
     if (mode !== "wrong") return bank;
-    var ids = S.wrong[key] || [];
+    var due = P.dueIds(key);
+    var ids = due.length ? due : P.wrongIds(key);   // 今日到期優先，沒到期就全部錯題
     var f = bank.filter(function (x) { return ids.indexOf(x.id) >= 0; });
     return f.length ? f : bank;
   }
@@ -330,6 +385,7 @@
       renderQ: function (it) { return window.renderPic(it); },
       slotsOf: function () { return [{ cells: 4 }]; },
       refOf: function (it) { return it.answer; },
+      expectedOf: function (it) { return it.answer; },
       gradeOf: function (it, si, txt) {
         var ok = txt === it.answer || (it.alt || []).indexOf(txt) >= 0;
         return { ok: ok, why: txt ? "" : "沒作答", canOverride: false };
@@ -366,6 +422,9 @@
       renderQ: crossQ,
       slotsOf: function () { return [{ cells: 3, hint: "第 1 句" }, { cells: 3, hint: "第 2 句" }]; },
       refOf: function (it, si) { return it.answers.slice(si * 3, si * 3 + 3).join("、"); },
+      expectedOf: function (it) {
+        var a = ["＿", "＿", "＿"]; a[it.pos - 1] = it.key; return a.join("");   // 只提示關鍵字位置，其餘取辨識首選
+      },
       gradeOf: function (it, si, txt, ctx) {
         if (!txt) return { ok: false, why: "沒作答" };
         if (txt.length !== 3) return { ok: false, why: "必須是三個字" };
@@ -421,6 +480,7 @@
       renderQ: gemQ,
       slotsOf: function () { return [{ cells: 1 }]; },
       refOf: function (it) { return it.answer; },
+      expectedOf: function (it) { return it.answer; },
       gradeOf: function (it, si, txt) {
         if (!txt) return { ok: false, why: "沒作答" };
         return { ok: txt === it.answer, why: txt.length > 1 ? "只能寫一個字" : "" };
@@ -520,17 +580,30 @@
   }
 
   // ══════════════════════════════════════════ 註冊視圖
+  /* 8-2 lazy load：進單元才載題庫（chain 另需成語庫做批改） */
+  var DATA_DEPS = { pic: ["pic"], cross: ["cross"], gem: ["gem"], chain: ["chain", "idioms", "moe"] };
   ["pic", "cross", "gem", "chain"].forEach(function (k) {
     P.VIEWS[k] = function (root, args) {
-      var sub = args[0];
-      if (sub === "daily") {
-        var rnd = seededRnd(k);
-        if (k === "pic") return runPic(root, UNITS.pic.count, 1, "daily", rnd);
-        if (k === "cross") return runCross(root, 2, 1, "daily", rnd);
-        if (k === "gem") return runGem(root, 3, 0, 1, "daily", rnd);
-        if (k === "chain") return runChain(root, null, 1, "daily", rnd);
-      }
-      unitHome(root, k, sub);
+      root.innerHTML = '<section class="panel"><p class="muted">題庫載入中…</p></section>';
+      P.ensureData(DATA_DEPS[k]).then(function () {
+        var sub = args[0];
+        if (sub === "daily") {
+          var rnd = seededRnd(k);
+          if (k === "pic") return runPic(root, UNITS.pic.count, 1, "daily", rnd);
+          if (k === "cross") return runCross(root, 2, 1, "daily", rnd);
+          if (k === "gem") return runGem(root, 3, 0, 1, "daily", rnd);
+          if (k === "chain") return runChain(root, null, 1, "daily", rnd);
+        }
+        if (sub === "wrong") {
+          if (k === "pic") return runPic(root, 10, 3, "wrong", Math.random);
+          if (k === "cross") return runCross(root, 3, 3, "wrong", Math.random);
+          if (k === "gem") return runGem(root, 5, 0, 3, "wrong", Math.random);
+          if (k === "chain") return runChain(root, null, 3, "wrong", Math.random);
+        }
+        unitHome(root, k, sub);
+      }).catch(function () {
+        root.innerHTML = '<section class="panel"><h2>題庫載入失敗</h2><p class="muted">請檢查網路後重新整理。</p><a class="btn" href="#/">回首頁</a></section>';
+      });
     };
   });
 
@@ -539,12 +612,12 @@
     var rows = Object.keys(UNITS).map(function (k) {
       var st = S.stats[k] || { rounds: 0, got: 0, total: 0 };
       var acc = st.total ? Math.round(st.got / st.total * 100) : 0;
-      var w = (S.wrong[k] || []).length;
+      var w = P.wrongIds(k).length, due = P.dueIds(k).length;
       return "<tr><td>" + UNITS[k].icon + " " + UNITS[k].name + "</td>" +
         "<td>" + st.rounds + "</td>" +
         "<td>" + st.got + " / " + st.total + "</td>" +
         '<td><div class="mini"><i style="width:' + acc + '%"></i></div>' + acc + "%</td>" +
-        "<td>" + w + "</td></tr>";
+        "<td>" + w + (due ? '<span class="chip chip--due">今日到期 ' + due + "</span>" : "") + "</td></tr>";
     }).join("");
 
     var badges = P.BADGES.map(function (b) {

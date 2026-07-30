@@ -179,6 +179,98 @@
 
   HandwritingPad.prototype.isBlank = function () { return this.strokes.length === 0; };
 
+  /* 每格的外框（0~1 正規化座標），與 _grid 同一套幾何 */
+  HandwritingPad.prototype.cellRects = function () {
+    var W = this.cv.width, H = this.cv.height, n = this.o.cells;
+    var pad = Math.round(H * 0.06);
+    var cell = (W - pad * (n + 1)) / n;
+    var size = Math.min(cell, H - pad * 2);
+    var y0 = (H - size) / 2;
+    var rects = [];
+    for (var i = 0; i < n; i++) {
+      var x0 = pad + i * (cell + pad) + (cell - size) / 2;
+      rects.push({ x: x0 / W, y: y0 / H, w: size / W, h: size / H });
+    }
+    return rects;
+  };
+
+  /* 依「筆畫重心落在哪一格」分段，輸出各格筆畫（格內 0~256 座標，供辨識引擎） */
+  HandwritingPad.prototype.strokesByCell = function () {
+    var rects = this.cellRects();
+    var out = rects.map(function () { return []; });
+    this.strokes.forEach(function (st) {
+      var pts = st.pts;
+      if (!pts.length) return;
+      var cx = 0;
+      for (var i = 0; i < pts.length; i++) cx += pts[i].x;
+      cx /= pts.length;
+      // 重心最近的格（用格中心距離，寫超出邊界也能歸位）
+      var best = 0, bd = Infinity;
+      rects.forEach(function (r, ri) {
+        var d = Math.abs(cx - (r.x + r.w / 2));
+        if (d < bd) { bd = d; best = ri; }
+      });
+      var r = rects[best];
+      out[best].push(pts.map(function (p) {
+        return [
+          Math.round(((p.x - r.x) / r.w) * 256),
+          Math.round(((p.y - r.y) / r.h) * 256)
+        ];
+      }));
+    });
+    return out;
+  };
+
+  /* 交卷後重播筆跡（依書寫順序動畫重繪） */
+  HandwritingPad.prototype.replay = function () {
+    if (this._replaying || !this.strokes.length) return;
+    var self = this, ctx = this.ctx, W = this.cv.width, H = this.cv.height;
+    var flat = [];
+    this.strokes.forEach(function (st, si) {
+      for (var i = 1; i < st.pts.length; i++) flat.push([si, i]);
+    });
+    if (!flat.length) return;
+    this._replaying = true;
+    var base = Math.max(1.6, H * 0.028), idx = 0;
+    var perFrame = Math.max(1, Math.round(flat.length / 90));   // 約 1.5 秒播完
+    ctx.clearRect(0, 0, W, H);
+    this._grid();
+    ctx.strokeStyle = getComputedStyle(this.host).getPropertyValue("--ink") || "#0f172a";
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    (function step() {
+      for (var k = 0; k < perFrame && idx < flat.length; k++, idx++) {
+        var si = flat[idx][0], i = flat[idx][1];
+        var a = self.strokes[si].pts[i - 1], b = self.strokes[si].pts[i];
+        ctx.lineWidth = base * (0.55 + b.p * 1.2);
+        ctx.beginPath();
+        ctx.moveTo(a.x * W, a.y * H);
+        ctx.lineTo(b.x * W, b.y * H);
+        ctx.stroke();
+      }
+      if (idx < flat.length) requestAnimationFrame(step);
+      else self._replaying = false;
+    })();
+  };
+
+  /* 揭曉後在工具列加「重播」鈕並鎖書寫 */
+  HandwritingPad.prototype.freezeWithReplay = function () {
+    if (this._frozen) return;
+    this._frozen = true;
+    this.o.penOnly = true;                       // 借 penOnly + frozen 擋新筆畫
+    this.cv.style.pointerEvents = "none";
+    var tools = this.host.querySelector(".pad__tools");
+    tools.innerHTML = "";
+    if (this.strokes.length) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "pad__btn";
+      b.textContent = "▶ 重播筆跡";
+      b.setAttribute("aria-label", "重播書寫筆跡");
+      var self = this;
+      b.addEventListener("click", function () { self.replay(); });
+      tools.appendChild(b);
+    }
+  };
+
   HandwritingPad.prototype.setPenOnly = function (v) { this.o.penOnly = !!v; };
 
   HandwritingPad.prototype.setCells = function (n) {

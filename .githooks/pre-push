@@ -1,0 +1,3 @@
+#!/bin/sh
+# 2-3 push 前跑題庫驗證，錯就擋下
+node tools/validate.mjs || { echo "✗ validate 失敗，已擋下 push"; exit 1; }

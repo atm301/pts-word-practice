@@ -35,9 +35,11 @@ log("首頁標題:", await page.title());
 log("單元卡數:", await page.locator(".ucard").count());
 await page.screenshot({ path: path.join(SHOT, "01-home.png"), fullPage: true });
 
-// ── 資料完整性（在頁面內檢查）
+// ── 資料完整性（8-2 lazy load：先手動載入全部題庫）
+await page.evaluate(() => window.PWP.ensureData(["idioms", "moe", "pic", "cross", "gem", "chain"]));
+await page.waitForFunction(() => window.PIC_BANK && window.CHAIN_BANK && window.IDIOMS_MOE);
 const audit = await page.evaluate(() => {
-  const uniq = new Set(window.IDIOMS);
+  const uniq = new Set([...window.IDIOMS, ...window.IDIOMS_MOE]);
   const bad = { pic: [], cross: [], gem: [], chain: [] };
 
   window.PIC_BANK.forEach(it => {
@@ -72,9 +74,9 @@ const audit = await page.evaluate(() => {
     if (n < 12) bad.chain.push(it.id + " " + (it.label || it.key) + " 庫內僅 " + n + " 句（滿分需 12）");
   });
 
-  return { idioms: window.IDIOMS.length, uniq: uniq.size, bad };
+  return { idioms: window.IDIOMS.length, moe: window.IDIOMS_MOE.length, uniq: uniq.size, bad };
 });
-log("\n成語庫:", audit.idioms, "條（去重後", audit.uniq, "）");
+log("\n成語庫: 自編", audit.idioms, "+ 教育部", audit.moe, "＝去重後", audit.uniq);
 for (const k of Object.keys(audit.bad)) {
   const arr = audit.bad[k];
   log(k + " 題庫問題:", arr.length ? "\n  - " + arr.join("\n  - ") : "無");

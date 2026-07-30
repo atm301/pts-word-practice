@@ -10,7 +10,9 @@ fs.mkdirSync(out, { recursive: true });
 
 const jobs = [
   { file: "og.html", w: 1200, h: 630, png: "og.png" },
-  { file: "icon.html", w: 180, h: 180, png: "icon-180.png" }
+  { file: "icon.html", w: 180, h: 180, png: "icon-180.png" },
+  { file: "icon.html", w: 192, h: 192, png: "icon-192.png" },
+  { file: "icon.html", w: 512, h: 512, png: "icon-512.png" }
 ];
 
 const b = await chromium.launch();

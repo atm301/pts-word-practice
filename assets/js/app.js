@@ -50,10 +50,10 @@
     points: 0,
     streak: { days: 0, last: "" },
     stats: {},              // unit -> {rounds, got, total}
-    wrong: {},              // unit -> [itemId]
+    wrong: {},              // unit -> { itemId: {step, due} }  間隔重複：錯→明天，答對後 +3 天、+7 天，三關全過畢業
     daily: {},              // date -> {unit:true}
     badges: [],
-    settings: { input: "hand", penOnly: false, guide: true, sound: true }
+    settings: { input: "hand", penOnly: false, guide: true, sound: true, recog: true }
   };
   var S = load();
 
@@ -62,12 +62,55 @@
       var raw = localStorage.getItem(KEY);
       if (!raw) return JSON.parse(JSON.stringify(DEF));
       var o = JSON.parse(raw);
-      return Object.assign(JSON.parse(JSON.stringify(DEF)), o, {
+      var st = Object.assign(JSON.parse(JSON.stringify(DEF)), o, {
         settings: Object.assign({}, DEF.settings, o.settings || {})
       });
+      // v1 → v1.1 遷移：wrong 由 [id] 陣列改為 {id:{step,due}}
+      Object.keys(st.wrong || {}).forEach(function (u) {
+        if (Array.isArray(st.wrong[u])) {
+          var m = {};
+          st.wrong[u].forEach(function (id) { m[id] = { step: 0, due: "" }; });
+          st.wrong[u] = m;
+        }
+      });
+      return st;
     } catch (e) { return JSON.parse(JSON.stringify(DEF)); }
   }
-  function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+  var saveWarned = false;
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(S)); }
+    catch (e) {
+      // 6-2 quota 滿或無痕模式：紀錄降級為僅存在記憶體，提示一次
+      if (!saveWarned) {
+        saveWarned = true;
+        toast("⚠ 無法寫入本機儲存（空間滿或無痕模式），本次紀錄關閉分頁後會消失");
+      }
+    }
+  }
+
+  /* 8-2 題庫 lazy load：進單元才載對應資料檔 */
+  var DATA_FILES = {
+    idioms: "data/idioms.js",
+    moe: "data/idioms-moe.js",
+    pic: "data/pic.js",
+    cross: "data/cross.js",
+    gem: "data/gem.js",
+    chain: "data/chain.js"
+  };
+  var _dataP = {};
+  function ensureData(keys) {
+    return Promise.all(keys.map(function (k) {
+      if (_dataP[k]) return _dataP[k];
+      _dataP[k] = new Promise(function (res, rej) {
+        var s = document.createElement("script");
+        s.src = DATA_FILES[k];
+        s.onload = res;
+        s.onerror = function () { delete _dataP[k]; rej(new Error("load " + k)); };
+        document.head.appendChild(s);
+      });
+      return _dataP[k];
+    }));
+  }
 
   var LEVELS = [
     [0, "實習文案"], [200, "社群小編"], [600, "行銷專員"], [1200, "資深操盤手"],
@@ -122,15 +165,29 @@
     grantBadge("first");
     save();
   }
+  /* 1-3 間隔重複：答錯 → 明天到期；復習答對 → +3 天 → +7 天 → 畢業移除 */
+  var SRS_GAP = [1, 3, 7];
+  function dateAdd(days) {
+    var d = new Date(); d.setDate(d.getDate() + days);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
   function addWrong(unit, id) {
-    var a = S.wrong[unit] || (S.wrong[unit] = []);
-    if (a.indexOf(id) < 0) a.push(id);
+    var m = S.wrong[unit] || (S.wrong[unit] = {});
+    m[id] = { step: 0, due: dateAdd(SRS_GAP[0]) };
     save();
   }
   function clearWrong(unit, id) {
-    var a = S.wrong[unit]; if (!a) return;
-    var i = a.indexOf(id); if (i >= 0) a.splice(i, 1);
+    var m = S.wrong[unit]; if (!m || !m[id]) return;
+    var rec = m[id];
+    rec.step++;
+    if (rec.step >= SRS_GAP.length) delete m[id];        // 三關全過，畢業
+    else rec.due = dateAdd(SRS_GAP[rec.step]);
     save();
+  }
+  function wrongIds(unit) { return Object.keys(S.wrong[unit] || {}); }
+  function dueIds(unit) {
+    var t = todayStr(), m = S.wrong[unit] || {};
+    return Object.keys(m).filter(function (id) { return !m[id].due || m[id].due <= t; });
   }
 
   // ────────────────────────────────────────── 單元設定
@@ -158,12 +215,16 @@
   };
 
   // ────────────────────────────────────────── 成語庫索引
-  var IDIOM_SET = null, IDIOM_LIST = null;
+  var IDIOM_SET = null, IDIOM_LIST = null, IDIOM_KEY = -1;
   function idioms() {
-    if (!IDIOM_SET) {
+    var src = (window.IDIOMS || []);
+    var moe = (window.IDIOMS_MOE || []);
+    var key = src.length + moe.length;           // 資料檔 lazy 載入後自動重建索引
+    if (!IDIOM_SET || IDIOM_KEY !== key) {
+      IDIOM_KEY = key;
       IDIOM_SET = {};
       IDIOM_LIST = [];
-      (window.IDIOMS || []).forEach(function (s) {
+      src.concat(moe).forEach(function (s) {
         if (!IDIOM_SET[s]) { IDIOM_SET[s] = 1; IDIOM_LIST.push(s); }
       });
     }
@@ -301,11 +362,20 @@
               : '<a class="btn btn--sm btn--primary" href="#/' + k + '/daily">開始</a>') +
         "</li>";
     }).join("");
+    // 1-3 今日到期的復習題摘要
+    var dueRows = Object.keys(UNITS).map(function (k) {
+      var n = dueIds(k).length;
+      return n ? '<li class="dlist__i"><span class="dlist__ic">📒</span>' +
+        "<span><b>" + UNITS[k].name + " 複習</b><small>間隔重複排程：今天到期 " + n + " 題</small></span>" +
+        '<a class="btn btn--sm" href="#/' + k + '/wrong">複習</a></li>' : "";
+    }).join("");
+
     root.innerHTML =
       '<section class="panel">' +
         "<h2>今日挑戰 · " + t + "</h2>" +
         '<p class="muted">每天題目固定（同一天所有人抽到同一組），四個單元各跑一輪。四關全清 +50 分。</p>' +
         '<ul class="dlist">' + rows + "</ul>" +
+        (dueRows ? "<h3>今日複習佇列</h3><ul class=\"dlist\">" + dueRows + "</ul>" : "") +
         '<a class="btn" href="#/">回首頁</a>' +
       "</section>";
   };
@@ -320,6 +390,9 @@
       "</div>" +
       '<label class="tog"><input type="checkbox" id="setPen"' + (s.penOnly ? " checked" : "") + "> 只接受觸控筆</label>" +
       '<label class="tog"><input type="checkbox" id="setGuide"' + (s.guide ? " checked" : "") + "> 田字格</label>" +
+      (s.input === "hand"
+        ? '<label class="tog"><input type="checkbox" id="setRecog"' + (s.recog ? " checked" : "") + "> 自動辨識（實驗）</label>"
+        : "") +
       "</div>";
   }
   function bindSettings(host, onChange) {
@@ -329,9 +402,10 @@
         if (onChange) onChange();
       });
     });
-    var p = $("#setPen", host), g = $("#setGuide", host);
+    var p = $("#setPen", host), g = $("#setGuide", host), r = $("#setRecog", host);
     if (p) p.addEventListener("change", function () { S.settings.penOnly = p.checked; save(); if (onChange) onChange(); });
     if (g) g.addEventListener("change", function () { S.settings.guide = g.checked; save(); if (onChange) onChange(); });
+    if (r) r.addEventListener("change", function () { S.settings.recog = r.checked; save(); if (onChange) onChange(); });
   }
 
   // ────────────────────────────────────────── 分享
@@ -353,6 +427,7 @@
     $: $, $$: $$, esc: esc, S: S, save: save, UNITS: UNITS,
     Timer: Timer, toast: toast, addPoints: addPoints, markPlayed: markPlayed,
     logRound: logRound, addWrong: addWrong, clearWrong: clearWrong, grantBadge: grantBadge,
+    wrongIds: wrongIds, dueIds: dueIds, ensureData: ensureData,
     VIEWS: VIEWS, go: go, route: route, paintHeader: paintHeader,
     shuffle: shuffle, pick: pick, mulberry32: mulberry32, seedFrom: seedFrom, todayStr: todayStr,
     idioms: idioms, chainMatches: chainMatches, settingsBar: settingsBar, bindSettings: bindSettings,

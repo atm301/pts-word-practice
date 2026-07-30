@@ -8,7 +8,10 @@
 <meta name="keywords" content="一字千金,一字千金練習,畫中有話,拾字路口,字字珠璣,洞築機先,成語練習,三字詞,手寫練習,公視益智節目">
 <meta name="author" content="圭話行銷 ATMarketing">
 <meta name="theme-color" content="#050915">
+<!-- 6-1 CSP：只放行自家 + GA4 + Meta Pixel -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://connect.facebook.net; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://www.facebook.com https://stats.g.doubleclick.net; img-src 'self' data: https://www.facebook.com https://www.googletagmanager.com https://*.google-analytics.com; style-src 'self' 'unsafe-inline'; font-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; worker-src 'self'">
 <link rel="canonical" href="https://atm301.github.io/pts-word-practice/">
+<link rel="manifest" href="manifest.webmanifest">
 
 <!-- OG / Twitter -->
 <meta property="og:type" content="website">
@@ -136,13 +139,10 @@ src="https://www.facebook.com/tr?id=4979950938896019&ev=PageView&noscript=1"></n
   <a class="btn btn--sm" href="privacy.html">詳細說明</a>
 </div>
 
-<script src="data/idioms.js"></script>
-<script src="data/pic.js"></script>
-<script src="data/cross.js"></script>
-<script src="data/gem.js"></script>
-<script src="data/chain.js"></script>
+<!-- 8-2 題庫改由 PWP.ensureData() 進單元時 lazy 載入 -->
 <script src="assets/js/handwriting.js"></script>
 <script src="assets/js/render-pic.js"></script>
+<script src="assets/js/recog.js"></script>
 <script src="assets/js/app.js"></script>
 <script src="assets/js/units.js"></script>
 <script>
@@ -170,6 +170,10 @@ src="https://www.facebook.com/tr?id=4979950938896019&ev=PageView&noscript=1"></n
     }catch(_){}
   },true);
 })();
+/* 8-1 Service Worker：進棚沒網路也能練 */
+if('serviceWorker' in navigator){
+  addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+}
 </script>
 </body>
 </html>
