@@ -36,7 +36,7 @@ node tools/expand-idioms.mjs   # 由教育部成語典開放資料重建 data/id
 git config core.hooksPath .githooks   # 啟用 pre-push 驗證（clone 後跑一次）
 ```
 
-題庫在 `data/`：`idioms.js`（自編 680+ 條）＋`idioms-moe.js`（教育部成語典 5309 條）、`pic.js`（50 題）、`cross.js`（36 題）、`gem.js`（37 題）、`chain.js`（30 題）。改題庫後 push，GitHub Actions 會自動再驗一次。
+題庫在 `data/`：`idioms.js`（自編 680+ 條）＋`idioms-moe.js`（教育部成語典 5309 條）＋`mkt.js`（行銷人成語包 153 句 × 10 情境）、`pic.js`（50 題）、`cross.js`（36 題）、`gem.js`（37 題）、`chain.js`（30 題）。改題庫後 push，GitHub Actions 會自動再驗一次。
 
 ## 授權與致謝
 

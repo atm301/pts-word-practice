@@ -654,7 +654,7 @@
         '<section class="panel">' +
           '<div class="uhead"><span class="uhead__ic">📣</span>' +
             "<div><h2>行銷人成語包</h2>" +
-            '<p class="muted">' + bank.length + " 句廣告行銷工作用得上的成語：提案、文案、投放、口碑、危機都有。每句附行銷解讀＋可直接抄的例句，也全部併入「洞築機先」的批改詞庫。</p></div></div>" +
+            '<p class="muted">' + bank.length + " 句廣告行銷工作用得上的成語，" + cats.length + " 個工作情境：提案、文案、投放、數據、消費心理、口碑、危機都有。每句附行銷解讀＋可直接抄的例句，也全部併入「洞築機先」的批改詞庫。</p></div></div>" +
           '<div class="mkt-bar">' +
             '<div class="mkt-cats">' +
               ["全部"].concat(cats).map(function (c) {

@@ -108,7 +108,7 @@ const sw = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
   if (!fs.existsSync(path.join(ROOT, f))) errs.push(`sw.js 預快取指向不存在的檔案：${f}`);
 });
 
-console.log(`題庫：pic ${W.PIC_BANK.length}、cross ${W.CROSS_BANK.length}、gem ${W.GEM_BANK.length}、chain ${W.CHAIN_BANK.length}、mkt ${W.MKT_BANK.length}、成語 ${setPlusMkt.size}`);
+console.log(`題庫：pic ${W.PIC_BANK.length}、cross ${W.CROSS_BANK.length}、gem ${W.GEM_BANK.length}、chain ${W.CHAIN_BANK.length}、mkt ${W.MKT_BANK.length}(${W.MKT_CATS.length}類)、成語 ${setPlusMkt.size}`);
 warn.forEach(w => console.log("⚠", w));
 if (errs.length) {
   console.error(`\n✗ ${errs.length} 個問題：`);
